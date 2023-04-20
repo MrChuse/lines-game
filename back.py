@@ -8,6 +8,9 @@ class Vector2:
     x: int = 0
     y: int = 0
 
+    def __str__(self) -> str:
+        return f'(x: {self.x}, y: {self.y})'
+
     def __add__(self, other):
         return Vector2(self.x + other.x, self.y + other.y)
 
@@ -29,14 +32,14 @@ class Vector2:
 
 
 class Move(Enum):
+    UPLEFT    = Vector2(-1, -1)
+    UP        = Vector2(0, -1)
+    UPRIGHT   = Vector2(1, -1)
     LEFT      = Vector2(-1, 0)
+    RIGHT     = Vector2(1, 0)
     DOWNLEFT  = Vector2(-1, 1)
     DOWN      = Vector2(0, 1)
     DOWNRIGHT = Vector2(1, 1)
-    RIGHT     = Vector2(1, 0)
-    UPRIGHT   = Vector2(1, -1)
-    UP        = Vector2(0, -1)
-    UPLEFT    = Vector2(-1, -1)
 
     def inverse(self):
         return Move(-self.value)
@@ -70,12 +73,12 @@ class Game:
             raise RuntimeError('This move was already made')
 
     def get_possible_moves(self):
-        possible_moves = set(Move)
+        possible_moves = {move: True for move in Move}
         for move in Move:
             try:
                 self.check_move(move)
             except RuntimeError:
-                possible_moves.discard(move)
+                possible_moves[move] = False
         return possible_moves
 
     def move(self, move: Move):
