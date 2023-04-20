@@ -1,4 +1,9 @@
+from collections import defaultdict
+
 import telebot
+from telebot import types
+
+from back import Game
 
 with open('api_token.txt', 'r') as f:
     API_TOKEN = f.read()
@@ -13,7 +18,7 @@ def send_welcome(message):
 Hi there, I am LittleLinesGameBot.
 Lines Game is a small multiplayer game with easy-to-learn-hard-to-master mechanics and has deep gameplay.
 To see the rules, use /rules
-To start the local game, use /local
+To start a local game, use /local
 To start an online game, use /online\
 """)
 
@@ -31,12 +36,98 @@ However, when the ball passes an _already visited vertex_, the player must make 
 Also, the ball leaves a trace and making a move which is a part of a trace is illegal. Crossing the trace is ok though.
 """, parse_mode='markdown')
 
+def send_game_state(chat_id, game: Game):
+    return bot.send_message(chat_id, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player}')
+
+def send_moves_keyboard(chat_id, game: Game):
+    symbols = '⇖⇑⇗⇐⇒⇙⇓⇘'
+    possible_moves = game.get_possible_moves()
+    symbols = ''.join(
+        [symbol if possible else '❌' for symbol, possible in zip(symbols, possible_moves.values())]
+    )
+    symbols = symbols[:4] + '❌' + symbols[4:]
+
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=False, row_width=3)
+    buttons = [types.KeyboardButton(symbol) for symbol in symbols]
+    kb.add(*buttons)
+    return bot.send_message(chat_id, 'Your move:', reply_markup=kb)
+
+local_games_params = defaultdict(dict)
+local_games = {}
 
 @bot.message_handler(commands=['local'])
 def create_local_game(message):
-    bot.reply_to(message, """\
-This is not implemented yet :(
-""")
+    sent = bot.send_message(
+        message.chat.id, 'Enter the number of players, 2 or 4:')
+    bot.register_next_step_handler(sent, process_number_of_players)
+
+def process_number_of_players(message):
+    try:
+        players = int(message.text)
+    except Exception:
+        sent = bot.send_message(
+            message.chat.id, 'Enter the number of players, 2 or 4:')
+        bot.register_next_step_handler(sent, process_number_of_players)
+        return
+    if players not in (2, 4):
+        sent = bot.send_message(
+            message.chat.id, 'Enter the number of players, 2 or 4:')
+        bot.register_next_step_handler(sent, process_number_of_players)
+        return
+
+    global local_games_params
+    local_games_params[message.from_user.id].update(total_players=players)
+
+    sent = bot.send_message(
+        message.chat.id, 'Enter a board size, two odd numbers:')
+    bot.register_next_step_handler(sent, process_field_size)
+
+def process_field_size(message: types.Message):
+    board_size = message.text.split()
+    if len(board_size) != 2:
+        sent = bot.send_message(
+            message.chat.id, 'Provide exactly *two* numbers\nEnter a board size, two odd numbers:', parse_mode='markdown')
+        bot.register_next_step_handler(sent, process_field_size)
+        return
+    try:
+        sizex = int(board_size[0])
+        sizey = int(board_size[1])
+    except Exception:
+        sent = bot.send_message(
+            message.chat.id, 'Provide two *integers*\nEnter a board size, two odd numbers:', parse_mode='markdown')
+        bot.register_next_step_handler(sent, process_field_size)
+        return
+    if sizex % 2 != 1 or sizey %2 != 1:
+        sent = bot.send_message(
+            message.chat.id, 'Board sizes must be *odd*\nEnter a board size, two odd numbers:', parse_mode='markdown')
+        bot.register_next_step_handler(sent, process_field_size)
+        return
+
+    global local_games_params
+    local_games_params[message.from_user.id].update(sizex=sizex, sizey=sizey)
+
+    sent = bot.send_message(
+        message.chat.id, 'We are all set, starting the game:')
+
+    game = Game(**local_games_params[message.from_user.id])
+
+    global local_games
+    local_games[message.from_user.id] = game
+
+    send_game_state(message.chat.id, game)
+    sent = send_moves_keyboard(message.chat.id, game)
+    bot.register_next_step_handler(sent, process_move)
+
+def process_move(message):
+    global local_games
+    game = local_games[message.from_user.id]
+    won = game.check_win()
+    if won:
+        bot.send_message(message.chat.id, f'Player {won} won! Play again?')
+        return
+    send_game_state(message.chat.id, game)
+    sent = send_moves_keyboard(message.chat.id, game)
+    bot.register_next_step_handler(sent, process_move)
 
 
 @bot.message_handler(commands=['online'])
