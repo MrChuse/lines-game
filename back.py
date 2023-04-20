@@ -60,7 +60,7 @@ class Game:
         self.total_players = total_players
         self.visited = defaultdict(list)
 
-    def move(self, move: Move):
+    def check_move(self, move: Move):
         new_ball_position : Vector2 = self.ball_position + move.value
         if new_ball_position.x < 0 or new_ball_position.x >= self.sizex:
             raise RuntimeError('This move is out of bounds')
@@ -68,6 +68,19 @@ class Game:
             raise RuntimeError('This move is out of bounds')
         if move in self.visited[self.ball_position]:
             raise RuntimeError('This move was already made')
+
+    def get_possible_moves(self):
+        possible_moves = set(Move)
+        for move in Move:
+            try:
+                self.check_move(move)
+            except RuntimeError:
+                possible_moves.discard(move)
+        return possible_moves
+
+    def move(self, move: Move):
+        new_ball_position : Vector2 = self.ball_position + move.value
+        self.check_move(move)
 
         # if the ball lands on a visited cell, the current player makes a second move, current player isn't changed
         if new_ball_position not in self.visited: # current player changes when ball lands on an unvisited cell
@@ -95,4 +108,5 @@ if __name__ == '__main__':
         move = Move[input().upper()]
         game.move(move)
         print(game.ball_position)
+        print(game.get_possible_moves())
         print(game.check_win())
