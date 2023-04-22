@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import List
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,9 @@ class Vector2:
             return self.y
         raise IndexError('Vector2 index out of range')
 
+    def __iter__(self):
+        return iter((self.x, self.y))
+
 
 class Move(Enum):
     UPLEFT    = Vector2(-1, -1)
@@ -44,6 +48,12 @@ class Move(Enum):
     def inverse(self):
         return Move(-self.value)
 
+@dataclass(frozen=True)
+class PlayerMove:
+    player: int
+    move: Move
+    from_position: Vector2
+    to_position: Vector2
 
 class Game:
     def __init__(self, sizex=7, sizey=7, total_players=2):
@@ -62,6 +72,7 @@ class Game:
         self.current_player = 0
         self.total_players = total_players
         self.visited = defaultdict(list)
+        self.move_history: List[PlayerMove] = []
 
     def check_move(self, move: Move):
         new_ball_position : Vector2 = self.ball_position + move.value
@@ -85,12 +96,15 @@ class Game:
         new_ball_position : Vector2 = self.ball_position + move.value
         self.check_move(move)
 
+        self.move_history.append(PlayerMove(self.current_player, move, self.ball_position, new_ball_position))
+
         # if the ball lands on a visited cell, the current player makes a second move, current player isn't changed
         if new_ball_position not in self.visited: # current player changes when ball lands on an unvisited cell
             self.current_player = (self.current_player + 1) % self.total_players
 
         self.visited[self.ball_position].append(move)
         self.visited[new_ball_position].append(move.inverse())
+
         self.ball_position = new_ball_position
 
     def check_win(self):
