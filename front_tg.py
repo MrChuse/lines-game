@@ -84,7 +84,7 @@ def send_game_state(chat_id, game: Game):
     draw_grid(game, im, draw)
     draw_moves(game, im, draw)
 
-    return bot.send_photo(chat_id, im, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}', )
+    return bot.send_photo(chat_id, im, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}')
 
 arrow_symbols = '↖⬆↗⬅➡↙⬇↘'
 def send_moves_keyboard(chat_id, game: Game):
@@ -102,6 +102,12 @@ local_games : Dict[int, Game] = {}
 
 @bot.message_handler(commands=['local'])
 def create_local_game(message: types.Message):
+    global local_games_params
+    local_games_params[message.from_user.id].update(is_local=True)
+    print(local_games_params)
+    create_game(message)
+
+def create_game(message: types.Message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = [types.KeyboardButton(symbol) for symbol in '24']
     kb.add(*buttons)
@@ -166,9 +172,9 @@ def process_field_size(message: types.Message):
         message.chat.id, 'We are all set, starting the game:')
     start_game(message)
 
-# @bot.message_handler(commands=['local'])
 def start_game(message: types.Message):
-    # global local_games_params
+    global local_games_params
+    local = local_games_params[message.from_user.id].pop('is_local')
     # local_games_params[message.from_user.id].update(total_players=2)
     # local_games_params[message.from_user.id].update(sizex=5, sizey=5)
     game = Game(**local_games_params[message.from_user.id])
@@ -176,9 +182,12 @@ def start_game(message: types.Message):
     global local_games
     local_games[message.from_user.id] = game
 
-    send_game_state(message.chat.id, game)
-    sent = send_moves_keyboard(message.chat.id, game)
-    bot.register_next_step_handler(sent, process_move)
+    if local:
+        send_game_state(message.chat.id, game)
+        sent = send_moves_keyboard(message.chat.id, game)
+        bot.register_next_step_handler(sent, process_move)
+    else:
+        bot.send_message(message.chat.id, "This is where you'd wait for the opponent but this is not actually implemented. Bye")
 
 arrows_to_moves = dict(zip(arrow_symbols, Move))
 def process_move(message: types.Message):
@@ -204,10 +213,27 @@ def process_move(message: types.Message):
 
 
 @bot.message_handler(commands=['online'])
-def create_online_game(message):
-    bot.reply_to(message, """\
-This is not implemented yet :(
-""")
+def online_game(message: types.Message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
+    buttons = [types.KeyboardButton(symbol) for symbol in ['Create', 'Join']]
+    kb.add(*buttons)
+    sent = bot.send_message(
+        message.chat.id, 'Create or join?', reply_markup=kb)
+    bot.register_next_step_handler(sent, create_or_join)
+
+def create_or_join(message: types.Message):
+    if message.text.lower() == 'create':
+        create_online_game(message)
+    elif message.text.lower() == 'join':
+        join_online_game(message)
+
+def create_online_game(message: types.Message):
+    global local_games_params
+    local_games_params[message.from_user.id].update(is_local=False)
+    create_game(message)
+
+def join_online_game(message):
+    pass
 
 
 # Handle all other messages with content_type 'text' (content_types defaults to ['text'])
@@ -216,4 +242,8 @@ def fallback(message):
     bot.reply_to(message, 'Unknown command')
 
 
+# game = Game(7, 7, 2)
+# game.move(Move.UP)
+# game.move(Move.DOWNRIGHT)
+# send_game_state(1489119319, game)
 bot.infinity_polling()
