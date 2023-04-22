@@ -1,15 +1,15 @@
 from collections import defaultdict
+from typing import Dict
 
 import telebot
 from telebot import types
 
-from back import Game
+from back import Game, Move
 
 with open('api_token.txt', 'r') as f:
     API_TOKEN = f.read()
 
 bot = telebot.TeleBot(API_TOKEN)
-
 
 # Handle '/start' and '/help'
 @bot.message_handler(commands=['help', 'start'])
@@ -39,13 +39,11 @@ Also, the ball leaves a trace and making a move which is a part of a trace is il
 def send_game_state(chat_id, game: Game):
     return bot.send_message(chat_id, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player}')
 
+arrow_symbols = '↖⬆↗⬅➡↙⬇↘'
 def send_moves_keyboard(chat_id, game: Game):
-    symbols = '⇖⇑⇗⇐⇒⇙⇓⇘'
     possible_moves = game.get_possible_moves()
-    symbols = ''.join(
-        [symbol if possible else '❌' for symbol, possible in zip(symbols, possible_moves.values())]
-    )
-    symbols = symbols[:4] + '❌' + symbols[4:]
+    symbols = [symbol if possible else '❌' for symbol, possible in zip(arrow_symbols, possible_moves.values())]
+    symbols.insert(4, '❌')
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=False, row_width=3)
     buttons = [types.KeyboardButton(symbol) for symbol in symbols]
@@ -53,15 +51,15 @@ def send_moves_keyboard(chat_id, game: Game):
     return bot.send_message(chat_id, 'Your move:', reply_markup=kb)
 
 local_games_params = defaultdict(dict)
-local_games = {}
+local_games : Dict[int, Game] = {}
 
 @bot.message_handler(commands=['local'])
-def create_local_game(message):
+def create_local_game(message: types.Message):
     sent = bot.send_message(
         message.chat.id, 'Enter the number of players, 2 or 4:')
     bot.register_next_step_handler(sent, process_number_of_players)
 
-def process_number_of_players(message):
+def process_number_of_players(message: types.Message):
     try:
         players = int(message.text)
     except Exception:
@@ -108,7 +106,13 @@ def process_field_size(message: types.Message):
 
     sent = bot.send_message(
         message.chat.id, 'We are all set, starting the game:')
+    start_game(message)
 
+# @bot.message_handler(commands=['local'])
+def start_game(message: types.Message):
+    # global local_games_params
+    # local_games_params[message.from_user.id].update(total_players=2)
+    # local_games_params[message.from_user.id].update(sizex=5, sizey=5)
     game = Game(**local_games_params[message.from_user.id])
 
     global local_games
@@ -118,9 +122,15 @@ def process_field_size(message: types.Message):
     sent = send_moves_keyboard(message.chat.id, game)
     bot.register_next_step_handler(sent, process_move)
 
-def process_move(message):
+arrows_to_moves = dict(zip(arrow_symbols, Move))
+def process_move(message: types.Message):
     global local_games
     game = local_games[message.from_user.id]
+    if message.text not in arrows_to_moves:
+        bot.send_message(message.chat.id, f'This is an illegal move')
+        sent = send_moves_keyboard(message.chat.id, game)
+        bot.register_next_step_handler(sent, process_move)
+    game.move(arrows_to_moves[message.text])
     won = game.check_win()
     if won:
         bot.send_message(message.chat.id, f'Player {won} won! Play again?')
