@@ -29,11 +29,11 @@ To start an online game, use /online\
 def print_rules(message):
     bot.reply_to(message, """\
 This is similar to turn-based football on a grid.
-Grid consists of _vertices_ and _edges_ which connect them.
-At the start of the game the ball is located in the center of the field.
-Objective of the the game is to score a goal by moving the ball to your opponent's _goal vertex_.
-On their turn, a player must move the ball to the adjacent vertex, so there are 8 possible moves.
-However, when the ball passes an _already visited vertex_, the player must make an _additional move_, giving him an opportunity to send the ball closer to their opponent's goal vertex.
+Grid consists of _vertices_ and _edges_ connecting them.
+At the start of the game the ball is located at the center of the field.
+The objective of the the game is to score a goal by moving the ball to your opponent's _goal vertex_.
+During their turn, a player must move the ball to the adjacent vertex, totalling to 8 possible moves.
+However, when the ball passes an _already visited vertex_, the player must make an _additional move_, giving them an opportunity to send the ball closer to their opponent's goal vertex.
 Also, the ball leaves a trace and making a move which is a part of a trace is illegal. Crossing the trace is ok though.
 """, parse_mode='markdown')
 
