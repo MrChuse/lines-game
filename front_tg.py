@@ -37,19 +37,19 @@ However, when the ball passes an _already visited vertex_, the player must make 
 Also, the ball leaves a trace and making a move which is a part of a trace is illegal. Crossing the trace is ok though.
 """, parse_mode='markdown')
 
-def calc_center_of_vertex(imsizex, imsizey, circle_sizex, circle_sizey, gamesizex, gamesizey, i, j):
-    offsetx = (imsizex - circle_sizex) / (gamesizex - 1)
-    offsety = (imsizey - circle_sizey) / (gamesizey - 1)
+def calc_center_of_vertex(i, j, imsizex, imsizey, circle_sizex, circle_sizey, gamesizex, gamesizey, marginx=50, marginy=50):
+    offsetx = (imsizex - circle_sizex - marginx) / (gamesizex - 1)
+    offsety = (imsizey - circle_sizey - marginy) / (gamesizey - 1)
     return (
-        i * offsetx + circle_sizex/2,
-        j * offsety + circle_sizey/2
+        i * offsetx + circle_sizex/2 + marginx/2,
+        j * offsety + circle_sizey/2 + marginy/2
     )
 
 def draw_one_vertex(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw, position: Vector2, color):
     imsizex, imsizey = im.size
     sizex = 10
     sizey = 10
-    centerx, centery = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, *position)
+    centerx, centery = calc_center_of_vertex(*position, imsizex, imsizey, sizex, sizey, game.sizex, game.sizey)
     draw.ellipse((centerx - sizex/2,
                   centery - sizex/2,
                   centerx + sizex/2,
@@ -74,8 +74,8 @@ def draw_moves(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
     sizey = 10
 
     for playermove in game.move_history:
-        centerx1, centery1 = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, *playermove.from_position)
-        centerx2, centery2 = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, *playermove.to_position)
+        centerx1, centery1 = calc_center_of_vertex(*playermove.from_position, imsizex, imsizey, sizex, sizey, game.sizex, game.sizey)
+        centerx2, centery2 = calc_center_of_vertex(*playermove.to_position, imsizex, imsizey, sizex, sizey, game.sizex, game.sizey)
         draw.line((centerx1, centery1, centerx2, centery2), fill=PLAYER_COLORS[playermove.player], width=5)
 
 def draw_ball(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
