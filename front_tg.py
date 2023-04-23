@@ -112,22 +112,31 @@ def send_moves_keyboard(chat_id, game: Game):
     return bot.send_message(chat_id, 'Your move:', reply_markup=kb)
 
 local_games_params = defaultdict(dict)
-local_games : Dict[int, Game] = {}
+local_games : Dict[int, Game] = {} # user id -> Game
+online_games : Dict[str, Dict] = defaultdict(dict) # game name -> Game, players
 
 @bot.message_handler(commands=['local'])
 def create_local_game(message: types.Message):
     global local_games_params
     local_games_params[message.from_user.id].update(is_local=True)
-    print(local_games_params)
     create_game(message)
 
 def create_game(message: types.Message):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    buttons = [types.KeyboardButton(symbol) for symbol in '24']
+    # kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # buttons = [types.KeyboardButton(symbol) for symbol in '24']
+    # kb.add(*buttons)
+    # sent = bot.send_message(
+    #     message.chat.id, 'Enter the number of players, 2 or 4:', reply_markup=kb)
+    # bot.register_next_step_handler(sent, process_number_of_players)
+
+    global local_games_params
+    local_games_params[message.from_user.id].update(total_players=2)
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
+    buttons = [types.KeyboardButton(symbol) for symbol in ['7 7', '9 9', '11 11']]
     kb.add(*buttons)
     sent = bot.send_message(
-        message.chat.id, 'Enter the number of players, 2 or 4:', reply_markup=kb)
-    bot.register_next_step_handler(sent, process_number_of_players)
+        message.chat.id, 'Enter a board size, two odd numbers:', reply_markup=kb)
+    bot.register_next_step_handler(sent, process_field_size)
 
 def process_number_of_players(message: types.Message):
     try:
@@ -182,8 +191,6 @@ def process_field_size(message: types.Message):
     global local_games_params
     local_games_params[message.from_user.id].update(sizex=sizex, sizey=sizey)
 
-    sent = bot.send_message(
-        message.chat.id, 'We are all set, starting the game:')
     start_game(message)
 
 def start_game(message: types.Message):
@@ -192,42 +199,56 @@ def start_game(message: types.Message):
     # local_games_params[message.from_user.id].update(total_players=2)
     # local_games_params[message.from_user.id].update(sizex=5, sizey=5)
     game = Game(**local_games_params[message.from_user.id])
-
     global local_games
     local_games[message.from_user.id] = game
 
     if local:
+        sent = bot.send_message(message.chat.id, 'We are all set, starting the game:')
         send_game_state(message.chat.id, game)
         sent = send_moves_keyboard(message.chat.id, game)
         bot.register_next_step_handler(sent, process_move)
     else:
-        bot.send_message(message.chat.id, "This is where you'd wait for the opponent but this is not actually implemented. Bye")
+        sent = bot.send_message(message.chat.id, "Enter room name:", reply_markup=types.ReplyKeyboardRemove())
+        bot.register_next_step_handler(sent, process_room_name)
+
+def process_room_name(message: types.Message):
+    global online_games
+    online_games[message.text].update(name=message.text, game=local_games[message.from_user.id], players=[message.from_user.id])
+    sent = bot.send_message(message.chat.id, 'We are all set, starting the game and waiting for your opponent...')
 
 arrows_to_moves = dict(zip(arrow_symbols, Move))
-def process_move(message: types.Message):
-    global local_games
-    game = local_games[message.from_user.id]
+def parse_and_move(message: types.Message, game: Game, next_step_gandler, *args, **kwargs):
     if 'resign' in message.text.lower():
-        send_game_state(message.chat.id, game)
-        bot.send_message(message.chat.id, f'Player {game.total_players-game.current_player} won! Play again? (use /local)', reply_markup=types.ReplyKeyboardRemove())
-        return
+        won = game.total_players-game.current_player
+        return True, won
     if message.text not in arrows_to_moves:
         bot.send_message(message.chat.id, f'This is an illegal move')
         sent = send_moves_keyboard(message.chat.id, game)
-        bot.register_next_step_handler(sent, process_move)
+        bot.register_next_step_handler(sent, next_step_gandler, *args, **kwargs)
     game.move(arrows_to_moves[message.text])
     won = game.check_win()
     if won is not None:
+        return True, won+1
+    return None, None
+
+def process_move(message: types.Message):
+    global local_games
+    game = local_games[message.from_user.id]
+
+    game_ended, who_won = parse_and_move(message, game, process_move)
+    if game_ended:
         send_game_state(message.chat.id, game)
-        bot.send_message(message.chat.id, f'Player {won+1} won! Play again? (use /local)', reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(message.chat.id, f'Player {who_won} won! Play again? (use /local)', reply_markup=types.ReplyKeyboardRemove())
+        local_games.pop(message.from_user.id)
         return
+
     send_game_state(message.chat.id, game)
     sent = send_moves_keyboard(message.chat.id, game)
     bot.register_next_step_handler(sent, process_move)
 
 
 @bot.message_handler(commands=['online'])
-def online_game(message: types.Message):
+def online_game_(message: types.Message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     buttons = [types.KeyboardButton(symbol) for symbol in ['Create', 'Join']]
     kb.add(*buttons)
@@ -246,8 +267,50 @@ def create_online_game(message: types.Message):
     local_games_params[message.from_user.id].update(is_local=False)
     create_game(message)
 
-def join_online_game(message):
-    pass
+def join_online_game(message: types.Message):
+    sent = bot.send_message(
+        message.chat.id, 'Enter room id:', reply_markup=types.ReplyKeyboardRemove())
+    bot.register_next_step_handler(sent, join_with_game_name)
+
+def join_with_game_name(message: types.Message):
+    name = message.text
+    global online_games
+    online_game = online_games.get(name)
+    if online_game is None:
+        sent = bot.send_message(
+        message.chat.id, 'This room was not found\nEnter room id:')
+        bot.register_next_step_handler(sent, join_with_game_name)
+        return
+    online_game['players'].append(message.from_user.id)
+    sent = send_game_state_to_two_players(message, online_game)
+    bot.register_next_step_handler(sent, process_online_move, online_game)
+
+def send_game_state_to_two_players(message, online_game):
+    players_ids = online_game['players']
+    game: Game = online_game['game']
+    current_player = game.current_player
+    current_player_id, second_player_id = players_ids
+    if current_player == 1:
+        current_player_id, second_player_id = second_player_id, current_player_id
+
+    send_game_state(second_player_id, game, remove_keyboard=True)
+    send_game_state(current_player_id, game)
+    sent = send_moves_keyboard(current_player_id, game)
+    return sent
+
+def process_online_move(message, online_game):
+    game: Game = online_game['game']
+    game_ended, who_won = parse_and_move(message, game, process_online_move, online_game)
+    if game_ended:
+        send_game_state(online_game['players'][0], game)
+        bot.send_message(online_game['players'][0], f'Player {who_won} won! Play again? (use /online)', reply_markup=types.ReplyKeyboardRemove())
+        send_game_state(online_game['players'][1], game)
+        bot.send_message(online_game['players'][1], f'Player {who_won} won! Play again? (use /online)', reply_markup=types.ReplyKeyboardRemove())
+        global online_games
+        online_games.pop(online_game['name'])
+        return
+    sent = send_game_state_to_two_players(message, online_game)
+    bot.register_next_step_handler(sent, process_online_move, online_game)
 
 
 # Handle all other messages with content_type 'text' (content_types defaults to ['text'])
