@@ -5,7 +5,7 @@ import telebot
 from PIL import Image, ImageDraw
 from telebot import types
 
-from back import Game, Move
+from back import Game, Move, Vector2
 
 with open('api_token.txt', 'r') as f:
     API_TOKEN = f.read()
@@ -45,20 +45,21 @@ def calc_center_of_vertex(imsizex, imsizey, circle_sizex, circle_sizey, gamesize
         j * offsety + circle_sizey/2
     )
 
-def draw_grid(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
+def draw_one_vertex(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw, position: Vector2, color):
     imsizex, imsizey = im.size
-
     sizex = 10
     sizey = 10
+    centerx, centery = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, *position)
+    draw.ellipse((centerx - sizex/2,
+                  centery - sizex/2,
+                  centerx + sizex/2,
+                  centery + sizey/2),
+                 fill=color)
 
+def draw_grid(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
     for i in range(game.sizex):
         for j in range(game.sizey):
-            centerx, centery = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, i, j)
-            draw.ellipse((centerx - sizex/2,
-                          centery - sizex/2,
-                          centerx + sizex/2,
-                          centery + sizey/2),
-                         fill=(255, 255, 255))
+            draw_one_vertex(game, im, draw, (i, j), (255, 255, 255))
 
 PLAYER_COLORS = {
     0: (255, 0, 0),
@@ -77,14 +78,27 @@ def draw_moves(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
         centerx2, centery2 = calc_center_of_vertex(imsizex, imsizey, sizex, sizey, game.sizex, game.sizey, *playermove.to_position)
         draw.line((centerx1, centery1, centerx2, centery2), fill=PLAYER_COLORS[playermove.player], width=5)
 
+def draw_ball(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
+    draw_one_vertex(game, im, draw, game.ball_position, PLAYER_COLORS[game.current_player])
 
-def send_game_state(chat_id, game: Game):
+def draw_goals(game: Game, im: Image.Image, draw: ImageDraw.ImageDraw):
+    draw_one_vertex(game, im, draw, (game.sizex//2, 0), PLAYER_COLORS[0])
+    draw_one_vertex(game, im, draw, (game.sizex//2, game.sizey-1), PLAYER_COLORS[1])
+
+def send_game_state(chat_id, game: Game, remove_keyboard=False):
     im = Image.new('RGB', (300, 300), (51, 57, 63))
     draw = ImageDraw.Draw(im)
     draw_grid(game, im, draw)
     draw_moves(game, im, draw)
+    draw_ball(game, im, draw)
+    draw_goals(game, im, draw)
 
-    return bot.send_photo(chat_id, im, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}')
+    if remove_keyboard:
+        reply_markup = types.ReplyKeyboardRemove()
+    else:
+        reply_markup = None
+
+    return bot.send_photo(chat_id, im, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}', reply_markup=reply_markup)
 
 arrow_symbols = '↖⬆↗⬅➡↙⬇↘'
 def send_moves_keyboard(chat_id, game: Game):
