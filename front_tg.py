@@ -225,6 +225,7 @@ def parse_and_move(message: types.Message, game: Game, next_step_gandler, *args,
         bot.send_message(message.chat.id, f'This is an illegal move')
         sent = send_moves_keyboard(message.chat.id, game)
         bot.register_next_step_handler(sent, next_step_gandler, *args, **kwargs)
+        return None, None
     game.move(arrows_to_moves[message.text])
     won = game.check_win()
     if won is not None:
@@ -269,16 +270,18 @@ def create_online_game(message: types.Message):
 
 def join_online_game(message: types.Message):
     sent = bot.send_message(
-        message.chat.id, 'Enter room id:', reply_markup=types.ReplyKeyboardRemove())
+        message.chat.id, 'Enter room name (type /abort to cancel):', reply_markup=types.ReplyKeyboardRemove())
     bot.register_next_step_handler(sent, join_with_game_name)
 
 def join_with_game_name(message: types.Message):
     name = message.text
+    if 'abort' in name.lower():
+        return
     global online_games
     online_game = online_games.get(name)
     if online_game is None:
         sent = bot.send_message(
-        message.chat.id, 'This room was not found\nEnter room id:')
+        message.chat.id, 'This room was not found\nEnter room name (type /abort to cancel):')
         bot.register_next_step_handler(sent, join_with_game_name)
         return
     online_game['players'].append(message.from_user.id)
