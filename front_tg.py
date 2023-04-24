@@ -98,7 +98,7 @@ def send_game_state(chat_id, game: Game, remove_keyboard=False):
     else:
         reply_markup = None
 
-    return bot.send_photo(chat_id, im, f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}', reply_markup=reply_markup)
+    return bot.send_photo(chat_id, telebot.util.pil_image_to_file(im, quality=100), f'Ball position: {game.ball_position}\nCurrent player: {game.current_player+1}', reply_markup=reply_markup)
 
 arrow_symbols = '↖⬆↗⬅➡↙⬇↘'
 def send_moves_keyboard(chat_id, game: Game):
